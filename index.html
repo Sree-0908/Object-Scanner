@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Universal Object Scanner</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+        .container-fluid {
+            padding: 0;
+        }
+        .header {
+            background-color: #343a40;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .main-content {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            background: #000;
+        }
+        #videoElement, #canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .controls {
+            width: 100%;
+            max-width: 640px;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .status-panel {
+            width: 100%;
+            max-width: 640px;
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .detection-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .detection-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        .detection-item:last-child {
+            border-bottom: none;
+        }
+        .btn-custom {
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+        }
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .settings-panel {
+            width: 100%;
+            max-width: 640px;
+            background-color: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .form-check {
+            margin-bottom: 10px;
+        }
+        .range-container {
+            margin-bottom: 15px;
+        }
+        .footer {
+            background-color: #343a40;
+            color: white;
+            text-align: center;
+            padding: 15px;
+            width: 100%;
+        }
+        .https-warning {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+            text-align: center;
+        }
+        .permission-help {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="text-center">
+            <div class="spinner-border mb-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p>Loading AI model... This may take a moment on the first run.</p>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <div class="header">
+            <h1>Universal Object Scanner</h1>
+            <p>Point your camera at objects to identify them</p>
+        </div>
+
+        <div class="main-content">
+            <div id="httpsWarning" class="https-warning" style="display: none;">
+                <strong>Security Warning:</strong> Camera access requires a secure connection (HTTPS). Please use a web server that supports HTTPS.
+            </div>
+
+            <div class="video-container">
+                <video id="videoElement" autoplay playsinline></video>
+                <canvas id="canvas"></canvas>
+            </div>
+
+            <div class="controls">
+                <button id="startBtn" class="btn btn-success btn-custom">Start Camera</button>
+                <button id="stopBtn" class="btn btn-danger btn-custom" disabled>Stop Camera</button>
+                <button id="speakBtn" class="btn btn-primary btn-custom" disabled>Enable Voice</button>
+            </div>
+
+            <div class="status-panel">
+                <h5>Detection Status</h5>
+                <div id="detectionStatus">Camera not started</div>
+                <div class="detection-list" id="detectionList">
+                    <!-- Detection items will be added here -->
+                </div>
+                <div id="permissionHelp" class="permission-help" style="display: none;">
+                    <h6>Camera Permission Denied</h6>
+                    <p>You have blocked camera access for this site. To fix this:</p>
+                    <ol>
+                        <li>Tap the <i class="bi bi-lock-fill"></i> icon (or similar) in your browser's address bar.</li>
+                        <li>Find "Camera" in the site settings and change it to "Allow".</li>
+                        <li>Refresh the page and try again.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="settings-panel">
+                <h5>Settings</h5>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="confidenceToggle" checked>
+                    <label class="form-check-label" for="confidenceToggle">Show confidence scores</label>
+                </div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="boundingBoxToggle" checked>
+                    <label class="form-check-label" for="boundingBoxToggle">Show bounding boxes</label>
+                </div>
+                <div class="range-container">
+                    <label for="confidenceThreshold" class="form-label">Confidence Threshold: <span id="confidenceValue">50%</span></label>
+                    <input type="range" class="form-range" min="0" max="100" value="50" id="confidenceThreshold">
+                </div>
+                <div class="range-container">
+                    <label for="speechCooldown" class="form-label">Speech Cooldown (seconds): <span id="cooldownValue">3</span></label>
+                    <input type="range" class="form-range" min="1" max="10" value="3" id="speechCooldown">
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2023 Universal Object Scanner | Powered by TensorFlow.js</p>
+        </div>
+    </div>
+
+    <div class="toast-container">
+        <div class="toast align-items-center text-white bg-primary border-0" id="notificationToast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body" id="toastMessage">
+                    Notification message
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- TensorFlow.js and COCO-SSD Model -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+
+    <script>
+        // DOM Elements
+        const video = document.getElementById('videoElement');
+        const canvas = document.getElementById('canvas');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const speakBtn = document.getElementById('speakBtn');
+        const detectionStatus = document.getElementById('detectionStatus');
+        const detectionList = document.getElementById('detectionList');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const notificationToast = document.getElementById('notificationToast');
+        const toastMessage = document.getElementById('toastMessage');
+        const confidenceToggle = document.getElementById('confidenceToggle');
+        const boundingBoxToggle = document.getElementById('boundingBoxToggle');
+        const confidenceThreshold = document.getElementById('confidenceThreshold');
+        const confidenceValue = document.getElementById('confidenceValue');
+        const speechCooldown = document.getElementById('speechCooldown');
+        const cooldownValue = document.getElementById('cooldownValue');
+        const httpsWarning = document.getElementById('httpsWarning');
+        const permissionHelp = document.getElementById('permissionHelp');
+
+        // State variables
+        let model = null;
+        let isDetecting = false;
+        let stream = null;
+        let speakEnabled = false;
+        let lastSpokenObject = null;
+        let lastSpokenTime = 0;
+        let detectionHistory = [];
+
+        // Initialize the app
+        async function init() {
+            // Check for HTTPS
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                httpsWarning.style.display = 'block';
+                showToast('Camera access requires HTTPS. Please see the warning message.', 'danger');
+            }
+
+            try {
+                model = await cocoSsd.load();
+                loadingOverlay.style.display = 'none';
+                showToast('Model loaded successfully!', 'success');
+            } catch (error) {
+                console.error('Failed to load model:', error);
+                loadingOverlay.innerHTML = `
+                    <div class="text-center">
+                        <p>Failed to load the model. Please refresh the page.</p>
+                        <button class="btn btn-primary" onclick="location.reload()">Reload</button>
+                    </div>
+                `;
+            }
+        }
+
+        // Start camera with improved error handling and fallback
+        async function startCamera() {
+            permissionHelp.style.display = 'none'; // Hide help on new attempt
+            let constraints = { video: { facingMode: 'environment' } };
+
+            try {
+                // Try getting the environment (rear) camera first
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                handleStreamSuccess();
+            } catch (error) {
+                console.log('Error with environment camera, trying default:', error.name);
+                if (error.name === 'NotAllowedError') {
+                    handlePermissionError();
+                    return;
+                }
+                // Fallback: Try again without facingMode constraint
+                try {
+                    constraints = { video: true };
+                    stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    handleStreamSuccess();
+                    showToast('Using default camera. Rear camera might not be available.', 'warning');
+                } catch (fallbackError) {
+                    console.error('Error accessing default camera:', fallbackError);
+                    handleCameraError(fallbackError);
+                }
+            }
+        }
+        
+        function handleStreamSuccess() {
+            video.srcObject = stream;
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                speakBtn.disabled = false;
+                
+                detectionStatus.textContent = 'Camera started. Ready to detect objects.';
+                showToast('Camera started successfully!', 'success');
+                
+                isDetecting = true;
+                detectObjects();
+            };
+        }
+
+        function handlePermissionError() {
+            detectionStatus.textContent = 'Error: Camera permission was denied.';
+            permissionHelp.style.display = 'block';
+            showToast('Camera permission denied. Please see instructions below.', 'danger');
+        }
+
+        function handleCameraError(error) {
+            let message = 'Error: Could not access camera.';
+            if (error.name === 'NotFoundError') {
+                message = 'Error: No camera found on this device.';
+            } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+                message = 'Error: Camera is already in use by another application.';
+            }
+            detectionStatus.textContent = message;
+            showToast(message, 'danger');
+        }
+
+
+        // Stop camera
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                stream = null;
+            }
+            
+            isDetecting = false;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            speakBtn.disabled = true;
+            
+            detectionStatus.textContent = 'Camera stopped.';
+            detectionList.innerHTML = '';
+            detectionHistory = [];
+            
+            // Clear canvas
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            showToast('Camera stopped.', 'info');
+        }
+
+        // Detect objects
+        async function detectObjects() {
+            if (!isDetecting || !model) return;
+            
+            const showConfidence = confidenceToggle.checked;
+            const showBoundingBoxes = boundingBoxToggle.checked;
+            const minConfidence = confidenceThreshold.value / 100;
+            const cooldown = parseFloat(speechCooldown.value);
+            
+            const predictions = await model.detect(video);
+            
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            let bestPrediction = null;
+            let bestConfidence = 0;
+            
+            predictions.forEach(prediction => {
+                if (prediction.score > minConfidence) {
+                    if (prediction.score > bestConfidence) {
+                        bestPrediction = prediction;
+                        bestConfidence = prediction.score;
+                    }
+                    if (showBoundingBoxes) {
+                        drawBoundingBox(ctx, prediction, showConfidence);
+                    }
+                }
+            });
+            
+            updateDetectionList(predictions, minConfidence);
+            
+            if (speakEnabled && bestPrediction) {
+                const currentObject = bestPrediction.class;
+                const currentTime = Date.now();
+                
+                if (currentTime - lastSpokenTime > cooldown * 1000 && currentObject !== lastSpokenObject) {
+                    speak(currentObject);
+                    lastSpokenTime = currentTime;
+                    lastSpokenObject = currentObject;
+                }
+            }
+            
+            requestAnimationFrame(detectObjects);
+        }
+
+        // Draw bounding box
+        function drawBoundingBox(ctx, prediction, showConfidence) {
+            const [x, y, width, height] = prediction.bbox;
+            
+            ctx.strokeStyle = '#00FF00';
+            ctx.lineWidth = 2;
+            ctx.font = '16px Arial';
+            ctx.fillStyle = '#00FF00';
+            
+            ctx.strokeRect(x, y, width, height);
+            
+            const label = showConfidence 
+                ? `${prediction.class}: ${Math.round(prediction.score * 100)}%`
+                : prediction.class;
+            
+            const textWidth = ctx.measureText(label).width;
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(x, y - 20, textWidth + 10, 20);
+            
+            ctx.fillStyle = '#00FF00';
+            ctx.fillText(label, x + 5, y - 5);
+        }
+
+        // Update detection list
+        function updateDetectionList(predictions, minConfidence) {
+            const filteredPredictions = predictions.filter(p => p.score > minConfidence);
+            filteredPredictions.sort((a, b) => b.score - a.score);
+            
+            detectionList.innerHTML = '';
+            
+            if (filteredPredictions.length === 0) {
+                detectionList.innerHTML = '<div class="detection-item">No objects detected</div>';
+                return;
+            }
+            
+            filteredPredictions.forEach(prediction => {
+                const item = document.createElement('div');
+                item.className = 'detection-item';
+                item.innerHTML = `
+                    <span>${prediction.class}</span>
+                    <span>${Math.round(prediction.score * 100)}%</span>
+                `;
+                detectionList.appendChild(item);
+            });
+            
+            detectionStatus.textContent = `Detected ${filteredPredictions.length} object(s)`;
+        }
+
+        // Text-to-speech
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(`I see a ${text}`);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                speechSynthesis.speak(utterance);
+            } else {
+                console.error('Speech synthesis not supported');
+            }
+        }
+
+        // Show toast notification
+        function showToast(message, type = 'primary') {
+            toastMessage.textContent = message;
+            notificationToast.className = `toast align-items-center text-white bg-${type} border-0`;
+            const toast = new bootstrap.Toast(notificationToast);
+            toast.show();
+        }
+
+        // Update confidence value display
+        confidenceThreshold.addEventListener('input', () => {
+            confidenceValue.textContent = `${confidenceThreshold.value}%`;
+        });
+
+        // Update cooldown value display
+        speechCooldown.addEventListener('input', () => {
+            cooldownValue.textContent = speechCooldown.value;
+        });
+
+        // Event listeners
+        startBtn.addEventListener('click', startCamera);
+        stopBtn.addEventListener('click', stopCamera);
+        speakBtn.addEventListener('click', () => {
+            speakEnabled = !speakEnabled;
+            speakBtn.textContent = speakEnabled ? 'Disable Voice' : 'Enable Voice';
+            speakBtn.className = speakEnabled 
+                ? 'btn btn-warning btn-custom' 
+                : 'btn btn-primary btn-custom';
+            
+            showToast(speakEnabled ? 'Voice enabled' : 'Voice disabled', 'info');
+        });
+
+        // Initialize the app when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
